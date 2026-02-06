@@ -16,7 +16,7 @@ import io
 import base64
 
 from .serializers import Auth0TokenSerializer, UserSerializer
-from .auth0_utils import validate_auth0_token, verify_jwt_and_get_userinfo
+from .auth0_utils import validate_auth0_token, verify_jwt_and_get_userinfo, generate_internal_jwt_token, verify_internal_jwt_token
 
 User = get_user_model()
 
@@ -149,3 +149,68 @@ class ApproveUserView(APIView):
         )
 
         return Response({"status": "approved"})
+
+class InternalTokenView(APIView):
+    """
+    Generate a JWT token for inter-container authentication.
+    Can be accessed by authenticated users (Auth0 or other methods).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Generate and return a JWT token for the authenticated user.
+        This token can be used to authenticate requests to other containers.
+        """
+        user = request.user
+        expires_in = request.data.get('expires_in_hours', 24)
+        
+        try:
+            token = generate_internal_jwt_token(user, expires_in_hours=int(expires_in))
+            return Response({
+                'token': token,
+                'user_id': user.id,
+                'username': user.username,
+                'expires_in': expires_in
+            }, status=200)
+        except Exception as e:
+            return Response(
+                {"detail": f"Failed to generate token: {str(e)}"},
+                status=500
+            )
+
+
+class ValidateInternalTokenView(APIView):
+    """
+    Validate an internal JWT token and return user information.
+    Useful for other containers to verify tokens issued by this service.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        """
+        Validate a JWT token and return the associated user information.
+        """
+        token = request.data.get('token')
+        
+        if not token:
+            return Response(
+                {"detail": "Token is required"},
+                status=400
+            )
+        
+        try:
+            payload = verify_internal_jwt_token(token)
+            return Response({
+                'valid': True,
+                'user_id': payload['user_id'],
+                'username': payload['username'],
+                'email': payload['email'],
+                'is_approved': payload['is_approved'],
+                'has_answered': payload['has_answered'],
+            }, status=200)
+        except Exception as e:
+            return Response({
+                'valid': False,
+                'detail': str(e)
+            }, status=401)

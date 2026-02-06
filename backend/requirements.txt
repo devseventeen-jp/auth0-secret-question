@@ -8,3 +8,4 @@ qrcode
 Pillow
 requests
 dj-database-url
+PyJWT

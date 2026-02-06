@@ -1,6 +1,8 @@
 import json
 import requests
 from jose import jwt
+from datetime import datetime, timedelta
+import jwt as pyjwt
 from django.utils.translation import gettext_lazy as _
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.authentication import BaseAuthentication
@@ -111,6 +113,84 @@ class Auth0Authentication(BaseAuthentication):
             auth0_sub = payload['sub']
             user = User.objects.get(auth0_sub=auth0_sub)
             return (user, None)
+        except Exception:
+            return None
+
+
+# JWT Token Generation and Validation for Inter-Container Authentication
+def generate_internal_jwt_token(user, expires_in_hours=24):
+    """
+    Generate a JWT token for inter-container authentication.
+    
+    Args:
+        user: Django User object
+        expires_in_hours: Token expiration time in hours
+    
+    Returns:
+        JWT token string
+    """
+    payload = {
+        'user_id': user.id,
+        'username': user.username,
+        'email': user.email,
+        'auth0_sub': user.auth0_sub,
+        'is_approved': user.is_approved,
+        'has_answered': user.has_answered,
+        'exp': datetime.utcnow() + timedelta(hours=expires_in_hours),
+        'iat': datetime.utcnow(),
+    }
+    
+    secret = settings.SECRET_KEY
+    token = pyjwt.encode(payload, secret, algorithm='HS256')
+    return token
+
+
+def verify_internal_jwt_token(token):
+    """
+    Verify and decode an internal JWT token.
+    
+    Args:
+        token: JWT token string
+    
+    Returns:
+        Decoded payload dictionary
+    
+    Raises:
+        AuthenticationFailed: If token is invalid or expired
+    """
+    try:
+        secret = settings.SECRET_KEY
+        payload = pyjwt.decode(token, secret, algorithms=['HS256'])
+        return payload
+    except pyjwt.ExpiredSignatureError:
+        raise AuthenticationFailed(_("Token is expired."), code="token_expired")
+    except pyjwt.InvalidTokenError as e:
+        raise AuthenticationFailed(_("Invalid token."), code="token_invalid")
+    except Exception as e:
+        raise AuthenticationFailed(_("Unable to parse authentication token."), code="token_invalid")
+
+
+class InternalJWTAuthentication(BaseAuthentication):
+    """
+    Authentication class for internal JWT tokens used for inter-container communication.
+    """
+    def authenticate(self, request):
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return None
+
+        parts = auth_header.split()
+        if parts[0].lower() != 'bearer' or len(parts) != 2:
+            return None
+
+        token = parts[1]
+        try:
+            payload = verify_internal_jwt_token(token)
+            user_id = payload['user_id']
+            user = User.objects.get(id=user_id)
+            return (user, None)
+        except AuthenticationFailed:
+            raise
         except Exception:
             return None
 

@@ -118,13 +118,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'app.User'
 
 # CORS
-CORS_ALLOW_ALL_ORIGINS = True # For dev
+# Configure CORS to allow external containers to access this API
+# For development: allow all origins
+# For production: set CORS_ALLOWED_ORIGINS environment variable (comma-separated)
+CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', 'False') == 'True'
+
+if not CORS_ALLOW_ALL_ORIGINS:
+    cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:8000')
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins.split(',')]
+
+# Allow credentials (cookies, authorization headers) in CORS requests
+CORS_ALLOW_CREDENTIALS = True
 
 # DRF
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
         'app.auth0_utils.Auth0Authentication',
+        'app.auth0_utils.InternalJWTAuthentication',
     ],
 }
 
