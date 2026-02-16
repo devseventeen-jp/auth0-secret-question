@@ -9,43 +9,43 @@ services:
       POSTGRES_DB: auth0_mfa_db
       POSTGRES_USER: django_user
       POSTGRES_PASSWORD: django_password
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
+    networks:
+      - app-network
 
   backend:
     build: ./backend
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./backend:/app
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       - db
     env_file:
       - .env
+    networks:
+      - app-network
 
   frontend:
     build: ./frontend
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - NUXT_HOST=0.0.0.0
       - NUXT_PORT=3000
     env_file:
       - .env
-
-  reverse-proxy:
-    image: nginx:alpine
-    ports:
-      - "8080:80"
-    volumes:
-      - ./reverse-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - backend
-      - frontend
+    networks:
+      - app-network
 
 volumes:
   postgres_data:
+
+networks:
+  app-network:
+    name: auth0-app-network
