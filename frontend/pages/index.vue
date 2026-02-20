@@ -24,12 +24,11 @@
 </template>
 
 <script setup>
-import { useAuth0 } from '@auth0/auth0-vue';
-
-const { loginWithRedirect, logout: auth0Logout, user, isAuthenticated, isLoading } = useAuth0();
+const { loginWithRedirect, logout: auth0Logout, user, isAuthenticated, isLoading } = useSafeAuth0();
+const config = useRuntimeConfig();
+const router = useRouter();
 
 const login = () => {
-    const config = useRuntimeConfig();
     loginWithRedirect({
         authorizationParams: {
             audience: config.public.auth0Audience
@@ -40,6 +39,26 @@ const login = () => {
 const logout = () => {
     auth0Logout({ logoutParams: { returnTo: window.location.origin } });
 };
+
+watch([isLoading, isAuthenticated], ([loading, authenticated]) => {
+    if (loading || !authenticated) return;
+
+    const redirectUrl = config.public.approvalRedirectUrl;
+    if (!redirectUrl) {
+        router.push('/dashboard');
+        return;
+    }
+
+    if (redirectUrl.startsWith('http')) {
+        if (redirectUrl === window.location.href) return;
+        window.location.href = redirectUrl;
+        return;
+    }
+
+    const normalizedPath = redirectUrl.startsWith('/') ? redirectUrl : `/${redirectUrl}`;
+    if (normalizedPath === router.currentRoute.value.path) return;
+    router.push(normalizedPath);
+}, { immediate: true });
 </script>
 
 <style scoped>

@@ -32,9 +32,7 @@
 </template>
 
 <script setup>
-import { useAuth0 } from '@auth0/auth0-vue';
-
-const { user, logout: auth0Logout, getAccessTokenSilently } = useAuth0();
+const { user, logout: auth0Logout, getAccessTokenSilently } = useSafeAuth0();
 const config = useRuntimeConfig();
 const backendUser = ref(null);
 

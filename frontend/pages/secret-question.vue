@@ -66,9 +66,7 @@
 </template>
 
 <script setup>
-import { useAuth0 } from "@auth0/auth0-vue";
-
-const { isAuthenticated, isLoading, idTokenClaims } = useAuth0();
+const { isAuthenticated, isLoading, idTokenClaims } = useSafeAuth0();
 const config = useRuntimeConfig();
 const router = useRouter();
 

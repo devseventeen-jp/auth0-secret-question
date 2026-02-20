@@ -4,7 +4,7 @@
       <div class="spinner" v-if="!error"></div>
       <h2>{{ status }}</h2>
       <p class="sub-message">{{ subMessage }}</p>
-      
+
       <div v-if="error" class="error-box">
         <p>{{ error }}</p>
         <button @click="goHome" class="btn btn-error">Back to Login</button>
@@ -14,9 +14,7 @@
 </template>
 
 <script setup>
-import { useAuth0 } from '@auth0/auth0-vue';
-
-const { isAuthenticated, isLoading, idTokenClaims, error: auth0Error } = useAuth0();
+const { isAuthenticated, isLoading, idTokenClaims, error: auth0Error } = useSafeAuth0();
 const config = useRuntimeConfig();
 const router = useRouter();
 
@@ -26,57 +24,61 @@ const error = ref(null);
 
 const goHome = () => router.push('/secret-question');
 
-// Watch for changes in Auth0 loading state
 watch([isLoading, isAuthenticated], async ([newLoading, newAuth]) => {
-    // Wait until SDK is done processing
-    if (newLoading) return;
+  if (newLoading) return;
 
-    console.log("DEBUG: Auth0 SDK Processing Complete", { 
-        isAuthenticated: newAuth,
-        error: auth0Error.value 
+  if (auth0Error.value) {
+    status.value = 'Authentication Failed';
+    error.value = auth0Error.value.message || 'Auth0 Error';
+    return;
+  }
+
+  if (!newAuth) {
+    router.push('/');
+    return;
+  }
+
+  try {
+    status.value = 'Verifying with Backend...';
+    subMessage.value = 'Registering your profile in our secure database...';
+
+    const token = idTokenClaims.value?.__raw;
+    if (!token) throw new Error('No ID Token found. Please try again.');
+
+    const response = await $fetch(`${config.public.apiBaseUrl}/api/auth/authorize`, {
+      method: 'POST',
+      body: { id_token: token },
+      headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (auth0Error.value) {
-        status.value = 'Authentication Failed';
-        error.value = auth0Error.value.message || "Auth0 Error";
+    if (response.status === 'needs_secret' || response.status === 'needs_approval') {
+      status.value = 'Security Verification Required';
+      subMessage.value = 'Redirecting to verification page...';
+      setTimeout(() => router.push('/secret-question'), 1000);
+      return;
+    }
+
+    status.value = 'Access Granted!';
+    subMessage.value = 'Welcome back! Redirecting...';
+    setTimeout(() => {
+      const redirectUrl = config.public.approvalRedirectUrl;
+      if (!redirectUrl) {
+        router.push('/dashboard');
         return;
-    }
+      }
 
-    if (!newAuth) {
-        // If not authenticated and no error, maybe session expired or accessed directly
-        console.warn("User not authenticated after callback processing.");
-        router.push('/');
+      if (redirectUrl.startsWith('http')) {
+        window.location.href = redirectUrl;
         return;
-    }
+      }
 
-    try {
-        status.value = 'Verifying with Backend...';
-        subMessage.value = 'Registering your profile in our secure database...';
-
-        const token = idTokenClaims.value?.__raw;
-        if (!token) throw new Error("No ID Token found. Please try again.");
-
-        // Call our Backend
-        const response = await $fetch(`${config.public.apiBaseUrl}/api/auth/authorize`, {
-            method: 'POST',
-            body: { id_token: token },
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (response.status === 'needs_secret' || response.status === 'needs_approval') {
-            status.value = 'Security Verification Required';
-            subMessage.value = 'Redirecting to verification page...';
-            setTimeout(() => router.push('/secret-question'), 1000);
-        } else {
-            status.value = 'Access Granted!';
-            subMessage.value = 'Welcome back! Redirecting to your dashboard...';
-            setTimeout(() => router.push('/dashboard'), 1000);
-        }
-    } catch (e) {
-        console.error("Backend Authorization Error:", e);
-        status.value = 'Verification Failed';
-        error.value = e.data?.message || e.message;
-    }
+      const normalizedPath = redirectUrl.startsWith('/') ? redirectUrl : `/${redirectUrl}`;
+      router.push(normalizedPath);
+    }, 1000);
+  } catch (e) {
+    status.value = 'Verification Failed';
+    error.value = e.data?.message || e.message;
+  }
 }, { immediate: true });
 </script>
 

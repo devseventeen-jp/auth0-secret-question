@@ -14,7 +14,7 @@ services:
     networks:
       - app-network
 
-  backend:
+  auth-backend:
     build: ./backend
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
@@ -28,7 +28,7 @@ services:
     networks:
       - app-network
 
-  frontend:
+  auth-frontend:
     build: ./frontend
     volumes:
       - ./frontend:/app
