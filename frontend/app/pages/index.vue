@@ -27,37 +27,63 @@
 const { loginWithRedirect, logout: auth0Logout, user, isAuthenticated, isLoading } = useSafeAuth0();
 const config = useRuntimeConfig();
 const router = useRouter();
+const route = useRoute();
+const isExternalReturnTo = (value) => {
+    if (!value || typeof value !== 'string') return false;
+    try {
+        const parsed = new URL(value, window.location.origin);
+        return parsed.origin !== window.location.origin;
+    } catch {
+        return false;
+    }
+};
 
 const login = () => {
+    const rawReturnTo = route.query.return_to;
+    const requestedReturnTo = typeof rawReturnTo === 'string' ? rawReturnTo : '';
+    const returnTo = isExternalReturnTo(requestedReturnTo) ? requestedReturnTo : '';
+    const rawSelectAccount = route.query.select_account;
+    const selectAccount = rawSelectAccount === '1' || rawSelectAccount === 'true';
+    const redirectPath = config.public.auth0RedirectPath || '/callback';
+    const callbackUrl = new URL(redirectPath, window.location.origin);
+    if (returnTo) {
+      callbackUrl.searchParams.set('return_to', returnTo);
+    }
+
     loginWithRedirect({
         authorizationParams: {
-            audience: config.public.auth0Audience
-        }
+            audience: config.public.auth0Audience,
+            redirect_uri: callbackUrl.toString(),
+            ...(selectAccount ? { prompt: 'select_account' } : {}),
+        },
+        appState: returnTo ? { return_to: returnTo } : undefined,
     });
 };
 
-const logout = () => {
-    auth0Logout({ logoutParams: { returnTo: window.location.origin } });
+const logout = async () => {
+    try {
+      await $fetch(`${config.public.apiBaseUrl}/jwt/session/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.error('Session cookie logout failed:', e);
+    } finally {
+      auth0Logout({ logoutParams: { returnTo: window.location.origin } });
+    }
 };
 
 watch([isLoading, isAuthenticated], ([loading, authenticated]) => {
     if (loading || !authenticated) return;
+    const rawReturnTo = route.query.return_to;
+    const requestedReturnTo = typeof rawReturnTo === 'string' ? rawReturnTo : '';
+    const returnTo = isExternalReturnTo(requestedReturnTo) ? requestedReturnTo : '';
+    const target = returnTo
+      ? { path: '/callback', query: { return_to: returnTo } }
+      : { path: '/callback' };
 
-    const redirectUrl = config.public.approvalRedirectUrl;
-    if (!redirectUrl) {
-        router.push('/dashboard');
-        return;
-    }
-
-    if (redirectUrl.startsWith('http')) {
-        if (redirectUrl === window.location.href) return;
-        window.location.href = redirectUrl;
-        return;
-    }
-
-    const normalizedPath = redirectUrl.startsWith('/') ? redirectUrl : `/${redirectUrl}`;
-    if (normalizedPath === router.currentRoute.value.path) return;
-    router.push(normalizedPath);
+    if (router.currentRoute.value.path === target.path) return;
+    router.push(target);
 }, { immediate: true });
 </script>
 

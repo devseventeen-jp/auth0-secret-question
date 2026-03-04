@@ -145,6 +145,18 @@ AUTH0_CLIENT_ID = os.environ.get('AUTH0_CLIENT_ID')
 AUTH0_AUDIENCE = os.environ.get('AUTH0_AUDIENCE')
 SECRET_QUESTION_TEXT = os.environ.get("SECRET_QUESTION_TEXT","What is your favorite artist ?")
 
+# Internal JWT session cookie settings
+INTERNAL_JWT_COOKIE_NAME = os.environ.get('INTERNAL_JWT_COOKIE_NAME', 'internal_jwt')
+INTERNAL_JWT_COOKIE_MAX_AGE = int(os.environ.get('INTERNAL_JWT_COOKIE_MAX_AGE', 24 * 60 * 60))
+INTERNAL_JWT_COOKIE_PATH = os.environ.get('INTERNAL_JWT_COOKIE_PATH', '/')
+INTERNAL_JWT_COOKIE_DOMAIN = os.environ.get('INTERNAL_JWT_COOKIE_DOMAIN') or None
+INTERNAL_JWT_COOKIE_SAMESITE = os.environ.get('INTERNAL_JWT_COOKIE_SAMESITE', 'Lax')
+INTERNAL_JWT_COOKIE_SECURE = os.environ.get('INTERNAL_JWT_COOKIE_SECURE', 'False') == 'True'
+RETURN_TO_ALLOWLIST = [
+    origin.strip() for origin in os.environ.get('RETURN_TO_ALLOWLIST', 'http://localhost:8080').split(',')
+    if origin.strip()
+]
+
 # Email Configuration (SMTP)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
@@ -153,3 +165,34 @@ EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
+
+# Logging
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
+AUTH_LOG_LEVEL = os.environ.get('AUTH_LOG_LEVEL', LOG_LEVEL).upper()
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'app.auth0_utils': {
+            'handlers': ['console'],
+            'level': AUTH_LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}

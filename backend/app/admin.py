@@ -17,7 +17,7 @@ class ApprovalLogAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        return bool(request.user and request.user.is_superuser)
 
 class ApprovalLogInline(admin.TabularInline):
     model = ApprovalLog

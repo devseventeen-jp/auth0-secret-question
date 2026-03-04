@@ -40,7 +40,18 @@ const currentTime = new Date().toLocaleString();
 const browserInfo = navigator.userAgent.split(' ')[0];
 
 const logout = () => {
-    auth0Logout({ logoutParams: { returnTo: window.location.origin } });
+    (async () => {
+        try {
+            await $fetch(`${config.public.apiBaseUrl}/jwt/session/logout`, {
+                method: 'POST',
+                credentials: 'include',
+            });
+        } catch (e) {
+            console.error("Session cookie logout failed:", e);
+        } finally {
+            auth0Logout({ logoutParams: { returnTo: window.location.origin } });
+        }
+    })();
 };
 
 onMounted(async () => {

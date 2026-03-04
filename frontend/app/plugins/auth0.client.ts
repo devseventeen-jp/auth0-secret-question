@@ -4,6 +4,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   const config = useRuntimeConfig();
   const domain = config.public.auth0Domain;
   const clientId = config.public.auth0ClientId;
+  const scope = config.public.auth0Scope || 'openid profile email';
 
   if (!domain || !clientId) {
     console.error('[Auth0] Missing configuration. Set NUXT_PUBLIC_AUTH0_DOMAIN / NUXT_PUBLIC_AUTH0_CLIENT_ID (or AUTH0_DOMAIN / AUTH0_CLIENT_ID).', {
@@ -24,6 +25,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       authorizationParams: {
         redirect_uri: redirectUri,
         audience: config.public.auth0Audience,
+        scope,
       },
       cacheLocation: "localstorage"
     })

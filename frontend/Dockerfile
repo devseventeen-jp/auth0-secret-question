@@ -1,10 +1,10 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
 
-RUN npm install
+RUN if [ -f package-lock.json ]; then npm ci --include=optional; else npm install --include=optional; fi
 
 COPY . .
 

@@ -10,7 +10,9 @@ services:
       POSTGRES_USER: django_user
       POSTGRES_PASSWORD: django_password
     expose:
-      - "5432"
+      - "5433"
+    command:
+      ["postgres", "-p", "5433"] 
     networks:
       - app-network
 

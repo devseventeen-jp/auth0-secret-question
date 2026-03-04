@@ -3,6 +3,7 @@ import requests
 from jose import jwt
 from datetime import datetime, timedelta
 import jwt as pyjwt
+import logging
 from django.utils.translation import gettext_lazy as _
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.authentication import BaseAuthentication
@@ -10,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def get_auth0_public_key(token):
@@ -165,8 +167,32 @@ def verify_internal_jwt_token(token):
     except pyjwt.ExpiredSignatureError:
         raise AuthenticationFailed(_("Token is expired."), code="token_expired")
     except pyjwt.InvalidTokenError as e:
+        logger.warning("verify_internal_jwt_token failed: %s", str(e))
         raise AuthenticationFailed(_("Invalid token."), code="token_invalid")
     except Exception as e:
+        logger.exception("verify_internal_jwt_token failed: unexpected error")
+        raise AuthenticationFailed(_("Unable to parse authentication token."), code="token_invalid")
+
+
+def decode_internal_jwt_token_allow_expired(token):
+    """
+    Decode internal JWT while skipping exp validation.
+    Signature is still verified.
+    """
+    try:
+        secret = settings.SECRET_KEY
+        payload = pyjwt.decode(
+            token,
+            secret,
+            algorithms=['HS256'],
+            options={'verify_exp': False},
+        )
+        return payload
+    except pyjwt.InvalidTokenError as e:
+        logger.warning("decode_internal_jwt_token_allow_expired failed: %s", str(e))
+        raise AuthenticationFailed(_("Invalid token."), code="token_invalid")
+    except Exception:
+        logger.exception("decode_internal_jwt_token_allow_expired failed: unexpected error")
         raise AuthenticationFailed(_("Unable to parse authentication token."), code="token_invalid")
 
 
@@ -177,10 +203,14 @@ class InternalJWTAuthentication(BaseAuthentication):
     def authenticate(self, request):
         auth_header = request.headers.get('Authorization')
         if not auth_header:
+            logger.debug("InternalJWTAuthentication skipped: missing Authorization header")
             return None
 
         parts = auth_header.split()
         if parts[0].lower() != 'bearer' or len(parts) != 2:
+            logger.warning(
+                "InternalJWTAuthentication failed: invalid Authorization header format"
+            )
             return None
 
         token = parts[1]
@@ -189,8 +219,16 @@ class InternalJWTAuthentication(BaseAuthentication):
             user_id = payload['user_id']
             user = User.objects.get(id=user_id)
             return (user, None)
-        except AuthenticationFailed:
+        except AuthenticationFailed as exc:
+            logger.warning("InternalJWTAuthentication failed: token verification error (%s)", str(exc))
             raise
+        except User.DoesNotExist:
+            logger.warning(
+                "InternalJWTAuthentication failed: user does not exist for user_id=%s",
+                payload.get('user_id') if 'payload' in locals() else "unknown",
+            )
+            return None
         except Exception:
+            logger.exception("InternalJWTAuthentication failed: unexpected error")
             return None
 

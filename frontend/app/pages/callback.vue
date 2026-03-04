@@ -17,12 +17,22 @@
 const { isAuthenticated, isLoading, idTokenClaims, error: auth0Error } = useSafeAuth0();
 const config = useRuntimeConfig();
 const router = useRouter();
+const route = useRoute();
 
 const status = ref('Processing Authentication...');
 const subMessage = ref('Securing your connection with Auth0...');
 const error = ref(null);
 
 const goHome = () => router.push('/secret-question');
+const isExternalReturnTo = (value) => {
+  if (!value || typeof value !== 'string') return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+};
 
 watch([isLoading, isAuthenticated], async ([newLoading, newAuth]) => {
   if (newLoading) return;
@@ -45,23 +55,41 @@ watch([isLoading, isAuthenticated], async ([newLoading, newAuth]) => {
     const token = idTokenClaims.value?.__raw;
     if (!token) throw new Error('No ID Token found. Please try again.');
 
-    const response = await $fetch(`${config.public.apiBaseUrl}/api/auth/authorize`, {
+    const rawReturnTo = route.query.return_to;
+    const requestedReturnTo = typeof rawReturnTo === 'string' ? rawReturnTo : '';
+    const returnTo = isExternalReturnTo(requestedReturnTo) ? requestedReturnTo : '';
+
+    const response = await $fetch(`${config.public.apiBaseUrl}/jwt/session/callback`, {
       method: 'POST',
-      body: { id_token: token },
-      headers: { Authorization: `Bearer ${token}` }
+      credentials: 'include',
+      body: {
+        id_token: token,
+        return_to: returnTo || null,
+      },
+      headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (response.status === 'needs_secret' || response.status === 'needs_approval') {
+    if (response.status === 'needs_secret') {
       status.value = 'Security Verification Required';
       subMessage.value = 'Redirecting to verification page...';
       setTimeout(() => router.push('/secret-question'), 1000);
       return;
     }
 
+    if (response.status === 'needs_approval') {
+      status.value = 'Approval Pending';
+      subMessage.value = 'Your submission is under review. Redirecting...';
+      setTimeout(() => router.push('/pending-approval'), 1000);
+      return;
+    }
+
     status.value = 'Access Granted!';
-    subMessage.value = 'Welcome back! Redirecting...';
+    subMessage.value = 'Session established. Redirecting...';
     setTimeout(() => {
-      const redirectUrl = config.public.approvalRedirectUrl;
+      const responseReturnTo = typeof response.return_to === 'string' ? response.return_to : '';
+      const redirectUrl = isExternalReturnTo(responseReturnTo)
+        ? responseReturnTo
+        : config.public.approvalRedirectUrl;
       if (!redirectUrl) {
         router.push('/dashboard');
         return;
