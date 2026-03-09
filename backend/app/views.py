@@ -303,8 +303,10 @@ class SecretQuestionView(APIView):
 
         return Response({
             "question": settings.SECRET_QUESTION_TEXT,
+            "real_name_required": settings.REAL_NAME_REQUIRED,
             "has_answered": user.has_answered,
             "secret_answer": user.secret_answer,
+            "real_name": user.real_name,
             "is_approved": user.is_approved,
             "rejection_reason": user.rejection_reason,
         })
@@ -322,17 +324,24 @@ class SecretQuestionView(APIView):
                 status=400
             )
 
-        answer = request.data.get("answer")
+        answer = (request.data.get("answer") or "").strip()
         if not answer:
             return Response(
                 {"detail": "answer is required"},
                 status=400
             )
+        real_name = (request.data.get("real_name") or "").strip()
+        if settings.REAL_NAME_REQUIRED and not real_name:
+            return Response(
+                {"detail": "real_name is required"},
+                status=400
+            )
 
         user.secret_answer = answer
+        user.real_name = real_name or None
         user.rejection_reason = None
         user.has_answered = True
-        user.save(update_fields=["secret_answer", "rejection_reason", "has_answered"])
+        user.save(update_fields=["secret_answer", "real_name", "rejection_reason", "has_answered"])
 
         # Log submission
         ApprovalLog.objects.create(

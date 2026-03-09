@@ -59,6 +59,7 @@ class UserAdmin(BaseUserAdmin):
     form = UserAdminForm
     list_display = (
         "username",
+        "real_name",
         "email",
         "has_answered",
         "is_approved",
@@ -66,14 +67,14 @@ class UserAdmin(BaseUserAdmin):
         "date_joined",
     )
     list_filter = ("has_answered", "is_approved", "is_staff")
-    search_fields = ("username", "email")
+    search_fields = ("username", "real_name", "email")
     readonly_fields = ("secret_answer", "has_answered", "date_joined", "last_login")
 
     # fieldsets をカスタマイズして「秘密の質問」セクションを追加
     # password フィールドは変更不可にするか、表示を工夫する
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        ("Personal info", {"fields": ("email",)}),
+        ("Personal info", {"fields": ("real_name", "email")}),
         ("Secret Question", {
             "fields": ("secret_answer", "has_answered", "is_approved", "rejection_reason", "admin_memo"),
         }),

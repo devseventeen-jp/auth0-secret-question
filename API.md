@@ -39,7 +39,9 @@
 - 認証: 必須
 - Response (`200`):
   - `question`
+  - `real_name_required`
   - `has_answered`
+  - `real_name`
   - `secret_answer`
   - `is_approved`
   - `rejection_reason`
@@ -49,9 +51,11 @@
 - 認証: 必須
 - Request Body:
   - `answer` (string, required)
+  - `real_name` (string, optional, `REAL_NAME_REQUIRED=True` の場合は必須)
 - 主な Response:
   - `200`: `{"status":"submitted"}`
   - `400`: `{"detail":"answer is required"}`
+  - `400`: `{"detail":"real_name is required"}`
   - `400`: `{"detail":"Already approved"}`
 
 #### 5. GET `/api/auth/status`

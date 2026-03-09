@@ -25,6 +25,7 @@
     <div v-else-if="hasAnswered && !isRetrying">
       <div v-if="rejectionReason" class="rejection-box">
         <h3>Verification Rejected</h3>
+        <p v-if="prevRealName" class="prev-answer">Submitted Real Name: <textarea readonly>{{ prevRealName }}</textarea></p>
         <p class="prev-answer">Submitted Answer: <textarea readonly>{{ prevAnswer }}</textarea></p>
         <div class="reason-container">
           <strong>Reason:</strong>
@@ -37,6 +38,8 @@
         <h3>Approval Pending</h3>
         <p>Your answer has been submitted and is waiting for administrator approval.</p>
         <div class="prev-answer-container">
+          <strong v-if="prevRealName">Submitted Real Name:</strong>
+          <textarea v-if="prevRealName" readonly>{{ prevRealName }}</textarea>
           <strong>Current Answer:</strong>
           <textarea readonly>{{ prevAnswer }}</textarea>
         </div>
@@ -49,6 +52,13 @@
       <h2>Security Question</h2>
       <p class="question-text">{{ question }}</p>
       <div class="input-group">
+        <input
+          v-model="realName"
+          type="text"
+          :placeholder="realNameRequired ? 'Enter your real name (required)' : 'Enter your real name (optional)'"
+        />
+      </div>
+      <div class="input-group">
         <textarea
           v-model="answer"
           placeholder="Type your answer here..."
@@ -58,7 +68,7 @@
         <p class="hint">Press Ctrl+Enter to submit</p>
       </div>
       <div class="actions">
-        <button @click="submitAnswer" :disabled="!answer" class="btn-primary">Submit Verification</button>
+        <button @click="submitAnswer" :disabled="!canSubmit" class="btn-primary">Submit Verification</button>
         <button v-if="hasAnswered" @click="cancelRetry" class="btn-secondary">Cancel</button>
       </div>
     </div>
@@ -77,6 +87,9 @@ const prevAnswer = ref("");
 const isApproved = ref(false);
 const rejectionReason = ref("");
 const answer = ref("");
+const realName = ref("");
+const prevRealName = ref("");
+const realNameRequired = ref(false);
 const isRetrying = ref(false);
 
 const modal = reactive({
@@ -131,6 +144,9 @@ const fetchData = async () => {
     question.value = data.question;
     hasAnswered.value = data.has_answered;
     prevAnswer.value = data.secret_answer;
+    prevRealName.value = data.real_name || "";
+    realName.value = data.real_name || "";
+    realNameRequired.value = Boolean(data.real_name_required);
     isApproved.value = data.is_approved;
     rejectionReason.value = data.rejection_reason;
 
@@ -165,7 +181,7 @@ const fetchData = async () => {
 };
 
 const submitAnswer = async () => {
-  if (!answer.value) return;
+  if (!canSubmit.value) return;
   
   const token = idTokenClaims.value?.__raw;
   if (!token) {
@@ -182,7 +198,7 @@ const submitAnswer = async () => {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ answer: answer.value }),
+      body: JSON.stringify({ answer: answer.value, real_name: realName.value }),
     });
 
     const data = await res.json();
@@ -233,6 +249,12 @@ const startRetry = async () => {
 const cancelRetry = () => {
   isRetrying.value = false;
 };
+
+const canSubmit = computed(() => {
+  if (!answer.value) return false;
+  if (realNameRequired.value && !realName.value.trim()) return false;
+  return true;
+});
 
 // watch for Auth0 state changes
 watch([isLoading, isAuthenticated, idTokenClaims], ([newLoading, newAuth, newToken]) => {
@@ -357,6 +379,18 @@ textarea[readonly] {
   transition: border-color 0.2s;
   box-sizing: border-box;
 }
+.input-group input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+.input-group input:focus { outline: none; border-color: #3b82f6; }
 .input-group textarea:focus { outline: none; border-color: #3b82f6; }
 
 .hint { font-size: 0.8rem; color: #94a3b8; margin-top: 8px; margin-bottom: 25px; }

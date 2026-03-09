@@ -19,6 +19,7 @@ class User(AbstractUser):
     is_approved = models.BooleanField(default=False)
     has_answered = models.BooleanField(default=False)
     secret_answer = models.TextField(null=True, blank=True)
+    real_name = models.CharField(max_length=255, null=True, blank=True)
     rejection_reason = models.TextField(null=True, blank=True)
 
     def __str__(self):

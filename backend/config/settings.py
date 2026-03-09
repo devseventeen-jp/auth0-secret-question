@@ -144,6 +144,7 @@ AUTH0_DOMAIN = os.environ.get('AUTH0_DOMAIN')
 AUTH0_CLIENT_ID = os.environ.get('AUTH0_CLIENT_ID')
 AUTH0_AUDIENCE = os.environ.get('AUTH0_AUDIENCE')
 SECRET_QUESTION_TEXT = os.environ.get("SECRET_QUESTION_TEXT","What is your favorite artist ?")
+REAL_NAME_REQUIRED = os.environ.get("REAL_NAME_REQUIRED", "False") == "True"
 
 # Internal JWT session cookie settings
 INTERNAL_JWT_COOKIE_NAME = os.environ.get('INTERNAL_JWT_COOKIE_NAME', 'internal_jwt')

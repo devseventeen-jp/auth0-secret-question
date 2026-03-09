@@ -7,5 +7,6 @@ class Auth0TokenSerializer(serializers.Serializer):
 class UserSerializer(serializers.Serializer):
     username = serializers.CharField()
     email = serializers.EmailField()
+    real_name = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     is_approved = serializers.BooleanField()
     has_answered = serializers.BooleanField()
