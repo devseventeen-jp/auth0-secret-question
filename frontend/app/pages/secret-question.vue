@@ -106,6 +106,58 @@ const showModal = (title, message, onClose = null) => {
   modal.show = true;
 };
 
+const buildLoginUrlWithReturnTo = () => {
+  if (!process.client) return "/";
+  const loginBase = config.public.authLoginUrl || "/";
+  const paramName = config.public.authLoginRedirectParam || "return_to";
+  const loginUrl = new URL(loginBase, window.location.origin);
+  loginUrl.searchParams.set(paramName, window.location.href);
+  return loginUrl.toString();
+};
+
+const redirectToLogin = () => {
+  if (!process.client) {
+    router.push("/");
+    return;
+  }
+  window.location.href = buildLoginUrlWithReturnTo();
+};
+
+const refreshCookieSession = async () => {
+  try {
+    return await $fetch(`${config.public.apiBaseUrl}/jwt/session/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (e) {
+    return null;
+  }
+};
+
+const handleAuthFailure = async () => {
+  const refresh = await refreshCookieSession();
+  if (!refresh || !refresh.status) {
+    redirectToLogin();
+    return { recovered: false, useBearer: false };
+  }
+
+  if (refresh.status === "needs_secret") {
+    return { recovered: true, useBearer: false };
+  }
+
+  if (refresh.status === "needs_approval") {
+    router.push("/pending-approval");
+    return { recovered: false, useBearer: false };
+  }
+
+  if (refresh.status === "ok") {
+    return { recovered: true, useBearer: false };
+  }
+
+  redirectToLogin();
+  return { recovered: false, useBearer: false };
+};
+
 const closeModal = () => {
   modal.show = false;
   if (modal.onClose) modal.onClose();
@@ -118,24 +170,49 @@ watch(isRetrying, (val) => {
   }
 });
 
-const fetchData = async () => {
+const fetchData = async (options = { useBearer: true, allowRecovery: true }) => {
+  const { useBearer, allowRecovery } = options;
+
   // Initialize isRetrying from sessionStorage
   if (process.client) {
     isRetrying.value = sessionStorage.getItem("retry_mode") === "true";
   }
 
   const token = idTokenClaims.value?.__raw;
-  if (!token) return;
+  if (useBearer && !token) {
+    if (allowRecovery) {
+      const recovered = await handleAuthFailure();
+      if (recovered.recovered) {
+        await fetchData({ useBearer: recovered.useBearer, allowRecovery: false });
+        return;
+      }
+      loading.value = false;
+      return;
+    }
+    loading.value = false;
+    return;
+  }
 
   try {
+    const headers = {};
+    if (useBearer && token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
     const res = await fetch(`${config.public.apiBaseUrl}/api/auth/secret-question`, {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      credentials: "include",
+      headers,
     });
 
     if (!res.ok) {
+      if (allowRecovery && (res.status === 401 || res.status === 403)) {
+        const recovered = await handleAuthFailure();
+        if (recovered.recovered) {
+          await fetchData({ useBearer: recovered.useBearer, allowRecovery: false });
+          return;
+        }
+      }
       console.error("Failed to fetch secret question", res.status);
       return;
     }
@@ -185,21 +262,32 @@ const submitAnswer = async () => {
   
   const token = idTokenClaims.value?.__raw;
   if (!token) {
-    showModal("Authentication Error", "Session expired. Please log in again.", () => {
-       window.location.href = "/";
-    });
+    const recovered = await handleAuthFailure();
+    if (recovered.recovered) {
+      showModal("Session Recovered", "Session was refreshed. Please submit again.");
+      return;
+    }
     return;
   }
 
   try {
     const res = await fetch(`${config.public.apiBaseUrl}/api/auth/secret-question`, {
       method: "POST",
+      credentials: "include",
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ answer: answer.value, real_name: realName.value }),
     });
+
+    if ((res.status === 401 || res.status === 403)) {
+      const recovered = await handleAuthFailure();
+      if (recovered.recovered) {
+        showModal("Session Recovered", "Session was refreshed. Please submit again.");
+        return;
+      }
+    }
 
     const data = await res.json();
 
@@ -267,7 +355,10 @@ watch([isLoading, isAuthenticated, idTokenClaims], ([newLoading, newAuth, newTok
 
   if (newToken) {
     fetchData();
+    return;
   }
+
+  fetchData({ useBearer: false, allowRecovery: true });
 }, { immediate: true });
 </script>
 

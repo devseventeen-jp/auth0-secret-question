@@ -200,10 +200,37 @@ class InternalJWTAuthentication(BaseAuthentication):
     """
     Authentication class for internal JWT tokens used for inter-container communication.
     """
+    def _authenticate_internal_token(self, token):
+        payload = verify_internal_jwt_token(token)
+        user_id = payload['user_id']
+        user = User.objects.get(id=user_id)
+        return (user, None)
+
+    def _authenticate_from_cookie(self, request):
+        cookie_name = settings.INTERNAL_JWT_COOKIE_NAME
+        token = request.COOKIES.get(cookie_name)
+        if not token:
+            return None
+
+        try:
+            return self._authenticate_internal_token(token)
+        except AuthenticationFailed as exc:
+            logger.warning("InternalJWTAuthentication cookie verification error (%s)", str(exc))
+            return None
+        except User.DoesNotExist:
+            logger.warning("InternalJWTAuthentication cookie user not found")
+            return None
+        except Exception:
+            logger.exception("InternalJWTAuthentication cookie unexpected error")
+            return None
+
     def authenticate(self, request):
         auth_header = request.headers.get('Authorization')
         if not auth_header:
-            logger.debug("InternalJWTAuthentication skipped: missing Authorization header")
+            cookie_auth = self._authenticate_from_cookie(request)
+            if cookie_auth:
+                return cookie_auth
+            logger.debug("InternalJWTAuthentication skipped: missing Authorization header and cookie")
             return None
 
         parts = auth_header.split()
@@ -211,24 +238,35 @@ class InternalJWTAuthentication(BaseAuthentication):
             logger.warning(
                 "InternalJWTAuthentication failed: invalid Authorization header format"
             )
+            cookie_auth = self._authenticate_from_cookie(request)
+            if cookie_auth:
+                return cookie_auth
             return None
 
         token = parts[1]
         try:
-            payload = verify_internal_jwt_token(token)
-            user_id = payload['user_id']
-            user = User.objects.get(id=user_id)
-            return (user, None)
+            return self._authenticate_internal_token(token)
         except AuthenticationFailed as exc:
+            cookie_auth = self._authenticate_from_cookie(request)
+            if cookie_auth:
+                logger.info("InternalJWTAuthentication recovered via cookie after bearer failure")
+                return cookie_auth
             logger.warning("InternalJWTAuthentication failed: token verification error (%s)", str(exc))
             raise
         except User.DoesNotExist:
+            cookie_auth = self._authenticate_from_cookie(request)
+            if cookie_auth:
+                logger.info("InternalJWTAuthentication recovered via cookie after missing bearer user")
+                return cookie_auth
             logger.warning(
-                "InternalJWTAuthentication failed: user does not exist for user_id=%s",
-                payload.get('user_id') if 'payload' in locals() else "unknown",
+                "InternalJWTAuthentication failed: user does not exist for bearer token",
             )
             return None
         except Exception:
             logger.exception("InternalJWTAuthentication failed: unexpected error")
+            cookie_auth = self._authenticate_from_cookie(request)
+            if cookie_auth:
+                logger.info("InternalJWTAuthentication recovered via cookie after unexpected bearer error")
+                return cookie_auth
             return None
 

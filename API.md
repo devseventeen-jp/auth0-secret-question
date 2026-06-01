@@ -204,3 +204,4 @@
 - SMTP 系 (`EMAIL_*`, `DEFAULT_FROM_EMAIL`) は API 機能拡張向け設定で、現行の `/api/auth/*` 処理では未使用です。
 - ログイン画面 (`/`) に `?select_account=true`（または `1`）を付けると、Auth0 ログイン時に `prompt=select_account` を付与します。
 - ただし Auth0 の既存セッション状態や tenant 側設定により、常にアカウント選択画面が表示されることは保証されません（有効化ヒントの位置づけ）。
+- `session/refresh` の　`401`　は「再認証が必要」のシグナルとして扱い、利用アプリ backend が frontend への再認証リダイレクトを実行する運用を推奨します。
